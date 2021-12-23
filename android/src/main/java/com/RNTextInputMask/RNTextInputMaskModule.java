@@ -1,6 +1,8 @@
 package com.RNTextInputMask;
 
 import android.text.TextWatcher;
+import android.view.View;
+import android.view.View.OnFocusChangeListener;
 import android.widget.EditText;
 
 import com.facebook.react.bridge.Promise;
@@ -24,7 +26,7 @@ import java.util.Collections;
 public class RNTextInputMaskModule extends ReactContextBaseJavaModule {
 
     private static final int TEXT_CHANGE_LISTENER_TAG_KEY = 123456789;
-    
+
     ReactApplicationContext reactContext;
 
     public RNTextInputMaskModule(ReactApplicationContext reactContext) {
@@ -92,7 +94,6 @@ public class RNTextInputMaskModule extends ReactContextBaseJavaModule {
                         }
                         MaskedTextChangedListener listener = new OnlyChangeIfRequiredMaskedTextChangedListener(mask, autocomplete, autoskip, editText);
                         editText.addTextChangedListener(listener);
-                        editText.setOnFocusChangeListener(listener);
                         editText.setTag(TEXT_CHANGE_LISTENER_TAG_KEY, listener);
                     }
                 });
@@ -106,28 +107,34 @@ public class RNTextInputMaskModule extends ReactContextBaseJavaModule {
  */
 class OnlyChangeIfRequiredMaskedTextChangedListener extends MaskedTextChangedListener {
     private String previousText;
+    private final OnFocusChangeListener focusChangeListener;
+
     public OnlyChangeIfRequiredMaskedTextChangedListener(@NotNull String primaryFormat, boolean autocomplete, boolean autoskip, @NotNull EditText field) {
         super(primaryFormat, Collections.<String>emptyList(), Collections.<Notation>emptyList(), AffinityCalculationStrategy.WHOLE_STRING, autocomplete, autoskip, field, null, null, false);
+        focusChangeListener = field.getOnFocusChangeListener();
+        field.setOnFocusChangeListener(this);
     }
 
-    @Override
+	@Override
+	public void onFocusChange(@Nullable View view, boolean hasFocus) {
+		super.onFocusChange(view, hasFocus);
+		focusChangeListener.onFocusChange(view, hasFocus);
+	}
+
+	@Override
     public void beforeTextChanged(@Nullable CharSequence s, int start, int count, int after) {
-        previousText = s.toString();
+        previousText = s != null ? s.toString() : "";
         super.beforeTextChanged(s, start, count, after);
     }
 
     @Override
     public void onTextChanged(@NotNull final CharSequence s, final int start, final int before, final int count) {
-        if (count == 0 && before == 0) {
-            return;
-        }
-
         String newText = s.toString().substring(start, start + count);
         String oldText = previousText.substring(start, start + before);
 
-        if (count == before && newText.equals(oldText)) {
-            return;
-        }
+        boolean disableAutocomplete = this.getAutocomplete() && count == before && newText.equals(oldText);
+        if (disableAutocomplete) this.setAutocomplete(false);
         super.onTextChanged(s, start, before, count);
+        if (disableAutocomplete) this.setAutocomplete(true);
     }
 }
